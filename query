@@ -1,0 +1,48 @@
+
+ALTER TABLE replace_skus ADD INDEX(existing);
+OPTIMIZE TABLE replace_skus;
+
+SET SESSION innodb_lock_wait_timeout = 120;
+
+-- Use this to check if a process seems to be taking a while or gets locked
+SHOW FULL PROCESSLIST;
+
+-- Update main product data
+UPDATE catalog_product_entity AS cpe
+JOIN replace_skus AS rskus ON cpe.sku = rskus.existing
+SET cpe.sku = rskus.new;
+
+
+-- Update product relations
+UPDATE catalog_product_relation AS cpr
+JOIN catalog_product_entity AS cpe ON cpr.child_id = cpe.entity_id
+JOIN replace_skus AS rskus ON cpe.sku = rskus.existing
+SET cpr.child_id = (
+	SELECT entity_id FROM catalog_product_entity WHERE sku = rskus.new
+);
+
+UPDATE catalog_product_super_link AS cpsl
+JOIN catalog_product_entity AS cpe ON cpsl.product_id = cpe.entity_id
+JOIN replace_skus AS rskus ON cpe.sku = rskus.existing
+SET cpsl.product_id = (
+	SELECT entity_id FROM catalog_product_entity WHERE sku = rskus.new
+);
+
+UPDATE catalog_product_entity_varchar AS cpev
+JOIN replace_skus AS rskus ON cpev.value = rskus.existing
+SET cpev.value = rskus.new
+LIMIT 500;
+
+UPDATE catalog_product_entity_text AS cpet
+JOIN replace_skus AS rskus ON cpet.value = rskus.existing
+SET cpet.value = rskus.new;
+
+
+-- Update order & quote data (for historical data integrity)
+UPDATE sales_order_item AS soi
+JOIN replace_skus AS rskus ON soi.sku = rskus.existing
+SET soi.sku = rskus.new;
+
+UPDATE quote_item AS qi
+JOIN replace_skus AS rskus ON qi.sku = rskus.existing
+SET qi.sku = rskus.new;
